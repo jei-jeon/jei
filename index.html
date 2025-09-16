@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>온라인 한글 빙고</title>
+  <style>
+    :root{
+      --sky:#e6f4ff; /* 하늘색 배경 */
+      --ink:#0b1f33;
+      --muted:#5b6b7a;
+      --card:#ffffff;
+      --accent:#1976d2;
+      --accent-weak:#e3f2fd;
+      --win:#25a244;
+      --grid:#d0e3f7;
+      --shadow:0 8px 24px rgba(20,60,120,.08);
+    }
+    html,body{height:100%;}
+    body{
+      margin:0; font-family: "Pretendard", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      color:var(--ink); background:linear-gradient(180deg, var(--sky), #f7fbff);
+    }
+    .wrap{max-width:1100px; margin:24px auto; padding:16px;}
+    .app{display:grid; grid-template-columns: 380px 1fr; gap:16px; align-items:start;}
+    @media (max-width: 960px){ .app{grid-template-columns: 1fr;} }
+
+    .card{background:var(--card); border-radius:18px; box-shadow:var(--shadow);
+      padding:18px 18px 14px; border:1px solid #e9f1fb;}
+    h1{margin:0 0 8px; font-size:1.5rem; letter-spacing:-0.2px}
+    .sub{margin:0 0 12px; color:var(--muted); font-size:.95rem}
+
+    label{font-weight:600; font-size:.95rem}
+    .row{display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin:8px 0 10px}
+    .row-3{display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin:8px 0 10px}
+    .field{display:flex; flex-direction:column; gap:6px}
+    select, input[type="text"], textarea{border:1px solid #cfe3f9; border-radius:12px; padding:10px 12px; font-size:14px; outline:none; background:#fbfdff}
+    textarea{min-height:180px; resize:vertical}
+    .hint{color:var(--muted); font-size:.86rem}
+
+    .btns{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+    button{
+      border:1px solid #cfe3f9; background:#fff; padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:700;
+    }
+    button.primary{background:var(--accent); color:white; border-color:var(--accent)}
+    button.ghost{background:#f5faff}
+
+    .board{display:grid; gap:8px;}
+    .grid{display:grid; gap:8px;}
+    .cell{
+      background:white; border:2px solid var(--grid); border-radius:14px; min-height:76px; display:flex; align-items:center; justify-content:center; text-align:center; padding:10px; font-size:1.05rem; font-weight:700;
+      user-select:none; transition:transform .05s ease, background .2s ease, border-color .2s ease;
+    }
+    .cell:hover{transform:translateY(-1px)}
+    .cell.marked{background:var(--accent-weak); border-color:var(--accent)}
+    .cell.free{background:#fffbe6; border-color:#ffe58f}
+    .cell.win{outline:3px solid var(--win);}
+
+    .status{margin-top:10px; display:flex; align-items:center; gap:10px}
+    .badge{background:#eef6ff; color:#195db3; padding:6px 10px; border-radius:999px; font-weight:800}
+    .flex{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .muted{color:var(--muted)}
+
+    .footer{margin-top:10px; color:var(--muted); font-size:.85rem}
+    .note{background:#f7fbff; border:1px dashed #cfe3f9; padding:10px 12px; border-radius:12px; margin-top:8px}
+    .small{font-size:.85rem}
+    .right{margin-left:auto}
+
+    /* --- Celebration Modal --- */
+    .modal-backdrop{
+      position:fixed; inset:0; background:rgba(11,31,51,.35);
+      display:none; align-items:center; justify-content:center; padding:24px; z-index:1000;
+      backdrop-filter:saturate(120%) blur(2px);
+    }
+    .modal-backdrop.show{display:flex; animation:fadeIn .18s ease-out}
+    @keyframes fadeIn{from{opacity:0} to{opacity:1}}
+    .modal{
+      background:var(--card); border:1px solid #e9f1fb; border-radius:22px; box-shadow:0 18px 60px rgba(20,60,120,.22);
+      max-width:520px; width:100%; padding:26px 22px; text-align:center;
+    }
+    .modal h2{
+      margin:0 0 6px; font-size:1.6rem; letter-spacing:-.3px;
+      color:#0b1f33;
+    }
+    .modal p{margin:0 0 14px; color:var(--muted)}
+    .ribbon{
+      display:inline-flex; align-items:center; gap:10px;
+      background:linear-gradient(120deg, #e3f2fd, #f0f7ff);
+      border:1px solid #cfe3f9; border-radius:999px; padding:8px 14px; font-weight:800; color:#195db3;
+      margin-bottom:14px;
+    }
+    .modal .btn-row{display:flex; gap:10px; justify-content:center; margin-top:6px}
+    .modal .btn-row button{min-width:120px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" style="margin-bottom:12px">
+      <h1>온라인 한글 빙고</h1>
+      <!-- 요청에 따라 상단 설명 문구 제거 -->
+    </div>
+
+    <div class="app">
+      <!-- LEFT: Controls -->
+      <div class="card">
+        <div class="row">
+          <div class="field">
+            <label for="size">격자 크기</label>
+            <select id="size">
+              <option value="3">3 × 3 (9칸)</option>
+              <option value="4">4 × 4 (16칸)</option>
+              <option value="5" selected>5 × 5 (25칸)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="free">가운데 프리 스페이스</label>
+            <select id="free">
+              <option value="off" selected>사용 안 함</option>
+              <option value="on">사용</option>
+            </select>
+            <span class="hint">홀수 크기(3,5)에서 추천</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="words">단어 목록 (줄바꿈 또는 콤마로 구분)</label>
+          <textarea id="words" placeholder="예) 지구, 태양, 달, 별, 행성\n빛\n중력\n공전\n자전\n…"></textarea>
+          <div class="hint">선택한 칸 수 이상 단어를 입력하세요. 중복은 자동 제거됩니다.</div>
+        </div>
+
+        <div class="btns">
+          <button class="primary" id="btn-generate">빙고 만들기</button>
+          <button id="btn-shuffle" title="같은 단어로 배치만 다시 섞기">다시 섞기</button>
+          <button class="ghost" id="btn-clear">초기화</button>
+          <button class="ghost" id="btn-print">인쇄</button>
+          <button class="ghost" id="btn-share">공유 링크 복사</button>
+          <span class="muted small" id="save-status"></span>
+        </div>
+
+        <div class="note small">
+          💡 팁: 단어를 입력한 뒤 <b>빙고 만들기</b>를 누르면 카드가 생성됩니다. 동일 단어로 배치만 바꾸고 싶다면 <b>다시 섞기</b>를 누르세요.
+        </div>
+      </div>
+
+      <!-- RIGHT: Board -->
+      <div class="card">
+        <div id="board" class="board">
+          <div class="muted">아직 빙고판이 없습니다. 왼쪽에서 단어를 입력하고 <b>빙고 만들기</b>를 눌러 주세요.</div>
+        </div>
+        <div class="status" id="status" style="display:none">
+          <span class="badge" id="bingo-count">빙고 0줄</span>
+          <span class="muted">칸을 클릭하여 체크하세요. 가로·세로·대각선을 자동으로 인식합니다.</span>
+        </div>
+        <div class="footer">
+          저장: 이 브라우저에만 <code>localStorage</code>로 단어 목록과 설정이 자동 저장됩니다.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Celebration Modal -->
+  <div class="modal-backdrop" id="win-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="win-title">
+      <div class="ribbon">🎉 축하합니다!</div>
+      <h2 id="win-title">빙고 완성~!</h2>
+      <p id="win-desc">가로/세로/대각선 2줄 이상 달성했어요.</p>
+      <div class="btn-row">
+        <button class="primary" id="btn-continue">다시하기</button>
+        <button class="ghost" id="btn-print2">인쇄</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Utilities ---
+    const qs = (sel, el=document) => el.querySelector(sel);
+    const qsa = (sel, el=document) => [...el.querySelectorAll(sel)];
+    const sampleShuffle = (arr) => {
+      const a = arr.slice();
+      for (let i=a.length-1; i>0; i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+    const uniq = (arr) => [...new Set(arr.map(s=>s.trim()).filter(Boolean))];
+
+    // --- State ---
+    const els = {
+      size: qs('#size'),
+      free: qs('#free'),
+      words: qs('#words'),
+      board: qs('#board'),
+      status: qs('#status'),
+      bingoCount: qs('#bingo-count'),
+      saveStatus: qs('#save-status'),
+      btnGen: qs('#btn-generate'),
+      btnShuf: qs('#btn-shuffle'),
+      btnClear: qs('#btn-clear'),
+      btnPrint: qs('#btn-print'),
+      btnShare: qs('#btn-share'),
+      // modal
+      backdrop: qs('#win-backdrop'),
+      btnContinue: qs('#btn-continue'),
+      btnPrint2: qs('#btn-print2'),
+    };
+
+    // --- Persistence (localStorage) ---
+    const KEY = 'kr-bingo:v1';
+    const save = () => {
+      const data = { size: els.size.value, free: els.free.value, words: els.words.value };
+      localStorage.setItem(KEY, JSON.stringify(data));
+      els.saveStatus.textContent = '저장됨';
+      setTimeout(()=> els.saveStatus.textContent='', 1200);
+    };
+    const load = () => {
+      try{
+        const url = new URL(location.href);
+        const w = url.searchParams.get('w');
+        const s = url.searchParams.get('size');
+        const f = url.searchParams.get('free');
+        if (w){
+          els.words.value = decodeURIComponent(w).replace(/\\|/g, '\\n');
+          if (s) els.size.value = String(parseInt(s,10));
+          if (f) els.free.value = f === '1' ? 'on' : 'off';
+          generate();
+          return;
+        }
+      }catch(e){/* ignore */}
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return;
+      try{
+        const data = JSON.parse(raw);
+        if (data.size) els.size.value = data.size;
+        if (data.free) els.free.value = data.free;
+        if (data.words) els.words.value = data.words;
+      }catch(e){}
+    };
+
+    // --- Bingo Logic ---
+    let currentGrid = []; // 2D array of cells {el, marked}
+    let N = 5;
+    let hasCelebrated = false; // 2줄 달성 팝업 여부
+
+    function buildGrid(words){
+      N = parseInt(els.size.value,10);
+      hasCelebrated = false; // 새 보드에서 초기화
+      const freeOn = (els.free.value === 'on') && (N % 2 === 1);
+      const need = N*N - (freeOn ? 1 : 0);
+      const list = sampleShuffle(words).slice(0, need);
+
+      // Create container
+      els.board.innerHTML = '';
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      grid.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+      els.board.appendChild(grid);
+
+      currentGrid = [];
+      let idx = 0;
+      for (let r=0; r<N; r++){
+        const row = [];
+        for (let c=0; c<N; c++){
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+
+          // center free
+          if (freeOn && r === Math.floor(N/2) && c === Math.floor(N/2)){
+            cell.textContent = 'FREE';
+            cell.classList.add('free', 'marked');
+          } else {
+            cell.textContent = list[idx++] || '';
+          }
+
+          cell.addEventListener('click', ()=>{
+            cell.classList.toggle('marked');
+            updateBingo();
+          });
+
+          grid.appendChild(cell);
+          row.push({el:cell});
+        }
+        currentGrid.push(row);
+      }
+      updateBingo();
+      els.status.style.display = 'flex';
+    }
+
+    function updateBingo(){
+      // Clear win outlines
+      qsa('.cell.win').forEach(c=>c.classList.remove('win'));
+
+      const wins = [];
+      const marked = (r,c)=> currentGrid[r]?.[c]?.el.classList.contains('marked');
+
+      // Rows
+      for (let r=0;r<N;r++){
+        let ok=true; for (let c=0;c<N;c++){ if (!marked(r,c)) { ok=false; break; } }
+        if (ok) wins.push({type:'row', i:r});
+      }
+      // Cols
+      for (let c=0;c<N;c++){
+        let ok=true; for (let r=0;r<N;r++){ if (!marked(r,c)) { ok=false; break; } }
+        if (ok) wins.push({type:'col', i:c});
+      }
+      // Diagonals
+      let ok=true; for (let i=0;i<N;i++){ if (!marked(i,i)) { ok=false; break; } } if (ok) wins.push({type:'diag-main'});
+      ok=true; for (let i=0;i<N;i++){ if (!marked(i,N-1-i)) { ok=false; break; } } if (ok) wins.push({type:'diag-anti'});
+
+      // Highlight winning lines
+      wins.forEach(w=>{
+        if (w.type==='row') for (let c=0;c<N;c++) currentGrid[w.i][c].el.classList.add('win');
+        if (w.type==='col') for (let r=0;r<N;r++) currentGrid[r][w.i].el.classList.add('win');
+        if (w.type==='diag-main') for (let i=0;i<N;i++) currentGrid[i][i].el.classList.add('win');
+        if (w.type==='diag-anti') for (let i=0;i<N;i++) currentGrid[i][N-1-i].el.classList.add('win');
+      });
+
+      els.bingoCount.textContent = `빙고 ${wins.length}줄`;
+
+      // --- Celebration trigger at 2 lines ---
+      if (!hasCelebrated && wins.length >= 2){
+        hasCelebrated = true;
+        openModal();
+      }
+    }
+
+    // --- Actions ---
+    function parseWords(){
+      const raw = els.words.value || '';
+      const arr = raw.replace(/\\r/g,'').split(/\\n|,/);
+      return uniq(arr);
+    }
+
+    function ensureEnough(words){
+      const n = parseInt(els.size.value,10);
+      const need = n*n - ((els.free.value==='on' && n%2===1) ? 1 : 0);
+      if (words.length < need){
+        alert(`단어가 부족합니다. 최소 ${need}개가 필요합니다.`);
+        return false;
+      }
+      return true;
+    }
+
+    function generate(){
+      const words = parseWords();
+      if (!ensureEnough(words)) return;
+      save();
+      buildGrid(words);
+    }
+
+    function shuffle(){
+      const words = parseWords();
+      if (!ensureEnough(words)) return;
+      buildGrid(words);
+    }
+
+    function clearAll(){
+      if (!confirm('모든 내용을 초기화할까요?')) return;
+      els.words.value = '';
+      els.size.value = '5';
+      els.free.value = 'off';
+      localStorage.removeItem(KEY);
+      els.board.innerHTML = '<div class="muted">초기화되었습니다. 단어를 입력하고 <b>빙고 만들기</b>를 눌러 주세요.</div>';
+      els.status.style.display = 'none';
+      hasCelebrated = false;
+    }
+
+    function printBoard(){
+      window.print();
+    }
+
+    function shareLink(){
+      const words = parseWords();
+      if (words.length === 0){ alert('단어를 먼저 입력해 주세요.'); return; }
+      const s = els.size.value;
+      const f = els.free.value === 'on' ? '1' : '0';
+      const url = new URL(location.href.split('?')[0]);
+      url.searchParams.set('size', s);
+      url.searchParams.set('free', f);
+      url.searchParams.set('w', encodeURIComponent(words.join('|')));
+      navigator.clipboard.writeText(url.toString()).then(()=>{
+        alert('공유 링크를 클립보드에 복사했습니다!');
+      }).catch(()=>{
+        prompt('복사할 수 없을 때는 아래 링크를 수동 복사하세요:', url.toString());
+      });
+    }
+
+    // --- Modal controls ---
+    function openModal(){
+      els.backdrop.classList.add('show');
+      els.backdrop.setAttribute('aria-hidden','false');
+      // focus trap: move focus to primary button
+      els.btnContinue?.focus();
+    }
+    function closeModal(){
+      els.backdrop.classList.remove('show');
+      els.backdrop.setAttribute('aria-hidden','true');
+    }
+
+    function resetGame(){
+      // Unmark all cells, but keep FREE cells marked
+      const cells = document.querySelectorAll('.cell');
+      cells.forEach(cell => {
+        cell.classList.remove('win');
+        if (cell.classList.contains('free')){
+          cell.classList.add('marked');
+        } else {
+          cell.classList.remove('marked');
+        }
+      });
+      hasCelebrated = false;
+      updateBingo();
+      closeModal();
+    }
+    els.btnContinue.addEventListener('click', resetGame);
+    els.btnPrint2.addEventListener('click', ()=>{ window.print(); closeModal(); });
+    els.backdrop.addEventListener('click', (e)=>{
+      if (e.target === els.backdrop) closeModal();
+    });
+    document.addEventListener('keydown', (e)=>{
+      if (e.key === 'Escape') closeModal();
+    });
+
+    // --- Events ---
+    els.btnGen.addEventListener('click', generate);
+    els.btnShuf.addEventListener('click', shuffle);
+    els.btnClear.addEventListener('click', clearAll);
+    els.btnPrint.addEventListener('click', printBoard);
+    els.btnShare.addEventListener('click', shareLink);
+    els.size.addEventListener('change', save);
+    els.free.addEventListener('change', save);
+    els.words.addEventListener('input', ()=>{ // autosave but debounce lightly
+      if (window.__sv) clearTimeout(window.__sv);
+      window.__sv = setTimeout(save, 300);
+    });
+
+    // --- Init ---
+    load();
+  </script>
+</body>
+</html>
