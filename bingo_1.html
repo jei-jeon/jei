@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>온라인 숫자 빙고</title>
+  <style>
+    :root{
+      --sky:#e6f4ff; /* 하늘색 배경 */
+      --ink:#0b1f33;
+      --muted:#5b6b7a;
+      --card:#ffffff;
+      --accent:#1976d2;
+      --accent-weak:#d7ebff; /* 기본 배경보다 조금 진한 하늘색 */
+      --win:#25a244;
+      --grid:#d0e3f7;
+      --shadow:0 8px 24px rgba(20,60,120,.08);
+    }
+    html,body{height:100%;}
+    body{
+      margin:0; font-family: "Pretendard", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      color:var(--ink); background:linear-gradient(180deg, var(--sky), #f7fbff);
+    }
+    .wrap{max-width:900px; margin:28px auto; padding:16px;}
+    .card{background:var(--card); border-radius:18px; box-shadow:var(--shadow);
+      padding:18px; border:1px solid #e9f1fb;}
+    h1{margin:0 0 8px; font-size:1.5rem; letter-spacing:-0.2px}
+    .muted{color:var(--muted)}
+
+    .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    select{border:1px solid #cfe3f9; border-radius:12px; padding:10px 12px; font-size:14px; outline:none; background:#fbfdff}
+
+    .board{display:grid; gap:8px; margin-top:12px}
+    .grid{display:grid; gap:8px;}
+    .cell{
+      background:white; border:2px solid var(--grid); border-radius:14px; min-height:90px; display:flex; align-items:center; justify-content:center;
+      text-align:center; padding:10px; font-size:1.6rem; font-weight:800; user-select:none;
+      transition:transform .05s ease, background .2s ease, border-color .2s ease;
+    }
+    .cell:hover{transform:translateY(-1px)}
+    .cell.marked{background:var(--accent-weak); border-color:var(--accent-weak)}
+    .cell.win{outline:3px solid var(--win);}
+    .cell[contenteditable="true"]{cursor:text;}
+
+    .btns{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px}
+    button{border:1px solid #cfe3f9; background:#fff; padding:12px 16px; border-radius:12px; cursor:pointer; font-weight:800}
+    button.primary{background:var(--accent); color:#fff; border-color:var(--accent)}
+
+    .status{margin-top:10px; display:flex; align-items:center; gap:10px}
+    .badge{background:#eef6ff; color:#195db3; padding:6px 10px; border-radius:999px; font-weight:800}
+
+    /* Modal */
+    .modal-backdrop{
+      position:fixed; inset:0; background:rgba(11,31,51,.35);
+      display:none; align-items:center; justify-content:center; padding:24px; z-index:1000;
+      backdrop-filter:saturate(120%) blur(2px);
+    }
+    .modal-backdrop.show{display:flex; animation:fadeIn .18s ease-out}
+    @keyframes fadeIn{from{opacity:0} to{opacity:1}}
+    .modal{
+      background:var(--card); border:1px solid #e9f1fb; border-radius:22px; box-shadow:0 18px 60px rgba(20,60,120,.22);
+      max-width:500px; width:100%; padding:26px 22px; text-align:center;
+    }
+    .modal h2{margin:0 0 6px; font-size:1.6rem; letter-spacing:-.3px; color:#0b1f33;}
+    .modal p{margin:0 0 14px; color:var(--muted)}
+    .ribbon{
+      display:inline-flex; align-items:center; gap:10px;
+      background:linear-gradient(120deg, #e3f2fd, #f0f7ff);
+      border:1px solid #cfe3f9; border-radius:999px; padding:8px 14px; font-weight:800; color:#195db3;
+      margin-bottom:14px;
+    }
+    .modal .btn-row{display:flex; gap:10px; justify-content:center; margin-top:6px}
+    .modal .btn-row button{min-width:120px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="toolbar">
+        <h1 style="margin-right:auto">온라인 숫자 빙고</h1>
+        <label for="size" class="muted">격자</label>
+        <select id="size">
+          <option value="3">3 × 3</option>
+          <option value="4">4 × 4</option>
+          <option value="5" selected>5 × 5</option>
+        </select>
+      </div>
+
+      <div id="board" class="board">
+        <div class="muted">랜덤 배치를 누르거나 직접 숫자를 입력하세요. <b>시작</b>을 누르면 수정이 잠깁니다.</div>
+      </div>
+
+      <div class="btns">
+        <button id="btn-random">랜덤 배치</button>
+        <button id="btn-start" class="primary">시작</button>
+        <button id="btn-reset" class="ghost">다시하기</button>
+        <span class="badge" id="bingo-count">빙고 0줄</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="win-backdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="win-title">
+      <div class="ribbon">🎉 축하합니다!</div>
+      <h2 id="win-title">빙고 완성~!</h2>
+      <p id="win-desc">가로/세로/대각선 <b>5줄</b>을 달성했어요.</p>
+      <div class="btn-row">
+        <button class="primary" id="btn-modal-restart">다시하기</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Utilities
+    const qs = (s,el=document)=>el.querySelector(s);
+    const qsa = (s,el=document)=>[...el.querySelectorAll(s)];
+    const sample = (n, min, max)=>{
+      // unique random integers [min, max]
+      const pool = [];
+      for (let i=min;i<=max;i++) pool.push(i);
+      // shuffle
+      for (let i=pool.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      return pool.slice(0,n);
+    };
+    const clamp = (v, lo, hi)=> Math.max(lo, Math.min(hi, v));
+
+    // State
+    let N = 5;
+    let started = false;
+    let currentGrid = []; // [{el}]
+    let hasCelebrated = false;
+
+    const els = {
+      size: qs('#size'),
+      board: qs('#board'),
+      btnRandom: qs('#btn-random'),
+      btnStart: qs('#btn-start'),
+      btnReset: qs('#btn-reset'),
+      bingoCount: qs('#bingo-count'),
+      backdrop: qs('#win-backdrop'),
+      btnModalRestart: qs('#btn-modal-restart'),
+    };
+
+    function rangeBySize(n){
+      if (n===3) return [1,20];
+      if (n===4) return [1,30];
+      return [1,50]; // 5x5
+    }
+
+    function buildGrid(){
+      els.board.innerHTML = '';
+      const grid = document.createElement('div');
+      grid.className = 'grid';
+      grid.style.gridTemplateColumns = `repeat(${N}, 1fr)`;
+      els.board.appendChild(grid);
+      currentGrid = [];
+      for (let r=0;r<N;r++){
+        const row=[];
+        for (let c=0;c<N;c++){
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.textContent = ''; // empty until random or edit
+          cell.setAttribute('contenteditable', 'true');
+          cell.addEventListener('beforeinput', (e)=>{
+            // allow only digits and control keys
+            if (e.data && !/[0-9]/.test(e.data)) e.preventDefault();
+          });
+          cell.addEventListener('blur', ()=> sanitizeCell(cell));
+          cell.addEventListener('click', ()=>{
+            if (started){
+              cell.classList.toggle('marked');
+              updateBingo();
+            }
+          });
+          grid.appendChild(cell);
+          row.push({el:cell});
+        }
+        currentGrid.push(row);
+      }
+      started = false;
+      hasCelebrated = false;
+      els.bingoCount.textContent = '빙고 0줄';
+    }
+
+    function sanitizeCell(cell){
+      const [lo,hi] = rangeBySize(N);
+      const v = parseInt(cell.textContent.replace(/\\D+/g,''),10);
+      if (isNaN(v)){ cell.textContent=''; return; }
+      cell.textContent = String(clamp(v, lo, hi));
+    }
+
+    function randomFill(){
+      const need = N*N;
+      const [lo,hi] = rangeBySize(N);
+      const arr = sample(need, lo, hi);
+      let idx=0;
+      for (let r=0;r<N;r++){
+        for (let c=0;c<N;c++){
+          const cell = currentGrid[r][c].el;
+          cell.textContent = String(arr[idx++]);
+        }
+      }
+    }
+
+    function setEditable(on){
+      qsa('.cell').forEach(cell=>{
+        cell.setAttribute('contenteditable', on ? 'true':'false');
+      });
+    }
+
+    function clearMarks(){
+      qsa('.cell').forEach(cell=>{
+        cell.classList.remove('marked','win');
+      });
+      els.bingoCount.textContent = '빙고 0줄';
+    }
+
+    function startGame(){
+      // validate all filled
+      for (let r=0;r<N;r++){
+        for (let c=0;c<N;c++){
+          const cell = currentGrid[r][c].el;
+          sanitizeCell(cell);
+          if (!cell.textContent.trim()){
+            alert('모든 칸에 숫자를 채워주세요.');
+            return;
+          }
+        }
+      }
+      setEditable(false);
+      started = true;
+      hasCelebrated = false;
+      clearMarks();
+    }
+
+    function resetGame(){
+      started = false;
+      hasCelebrated = false;
+      setEditable(true);
+      clearMarks();
+    }
+
+    function updateBingo(){
+      // remove win outline
+      qsa('.cell.win').forEach(c=>c.classList.remove('win'));
+      const marked = (r,c)=> currentGrid[r][c].el.classList.contains('marked');
+      const wins = [];
+
+      // rows
+      for (let r=0;r<N;r++){
+        let ok=true; for (let c=0;c<N;c++){ if (!marked(r,c)) { ok=false; break; } }
+        if (ok) wins.push({type:'row', i:r});
+      }
+      // cols
+      for (let c=0;c<N;c++){
+        let ok=true; for (let r=0;r<N;r++){ if (!marked(r,c)) { ok=false; break; } }
+        if (ok) wins.push({type:'col', i:c});
+      }
+      // diagonals
+      let ok=true; for (let i=0;i<N;i++){ if (!marked(i,i)) { ok=false; break; } } if (ok) wins.push({type:'diag-main'});
+      ok=true; for (let i=0;i<N;i++){ if (!marked(i,N-1-i)) { ok=false; break; } } if (ok) wins.push({type:'diag-anti'});
+
+      // highlight
+      wins.forEach(w=>{
+        if (w.type==='row') for (let c=0;c<N;c++) currentGrid[w.i][c].el.classList.add('win');
+        if (w.type==='col') for (let r=0;r<N;r++) currentGrid[r][w.i].el.classList.add('win');
+        if (w.type==='diag-main') for (let i=0;i<N;i++) currentGrid[i][i].el.classList.add('win');
+        if (w.type==='diag-anti') for (let i=0;i<N;i++) currentGrid[i][N-1-i].el.classList.add('win');
+      });
+
+      els.bingoCount.textContent = `빙고 ${wins.length}줄`;
+
+      if (!hasCelebrated && wins.length >= 5){ // 5줄 달성 시
+        hasCelebrated = true;
+        openModal();
+        playChime();
+      }
+    }
+
+    // Simple chime with Web Audio API
+    function playChime(){
+      try{
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
+        notes.forEach((f, i)=>{
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = 'sine';
+          o.frequency.value = f;
+          o.connect(g); g.connect(ctx.destination);
+          const t = now + i*0.12;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(0.3, t+0.01);
+          g.gain.exponentialRampToValueAtTime(0.0001, t+0.25);
+          o.start(t); o.stop(t+0.26);
+        });
+      }catch(e){ /* ignore audio errors */ }
+    }
+
+    // Modal
+    function openModal(){
+      els.backdrop.classList.add('show');
+      els.backdrop.setAttribute('aria-hidden','false');
+    }
+    function closeModal(){
+      els.backdrop.classList.remove('show');
+      els.backdrop.setAttribute('aria-hidden','true');
+    }
+
+    // Events
+    els.size.addEventListener('change', ()=>{
+      N = parseInt(els.size.value,10);
+      buildGrid();
+      randomFill();
+    });
+    els.btnRandom.addEventListener('click', ()=>{
+      if (started) { alert('게임 중에는 다시 배치할 수 없어요. 다시하기를 눌러주세요.'); return; }
+      randomFill();
+    });
+    els.btnStart.addEventListener('click', startGame);
+    els.btnReset.addEventListener('click', ()=>{ closeModal(); buildGrid(); randomFill(); });
+    els.btnModalRestart.addEventListener('click', ()=>{ closeModal(); buildGrid(); randomFill(); });
+    els.backdrop.addEventListener('click', (e)=>{ if (e.target === els.backdrop) closeModal(); });
+
+    // Init
+    buildGrid();
+    randomFill();
+  </script>
+</body>
+</html>
